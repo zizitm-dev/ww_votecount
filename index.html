@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마을 로그 집계 도구</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h2 { text-align: center; font-size: 1.2rem; margin-bottom: 5px; }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .panel {
+            display: flex;
+            flex-direction: column;
+        }
+        h3 { font-size: 1rem; margin: 10px 0 5px 0; }
+        textarea {
+            width: 100%;
+            height: 220px;
+            box-sizing: border-box;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:active { background-color: #0056b3; }
+        .result-box {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            min-height: 100px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .options-box {
+            background: #fff;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
+        .options-box label {
+            display: block;
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+        @media (min-width: 768px) {
+            .container { flex-direction: row; }
+            .panel { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <h2>로그 집계 도구</h2>
+    <div id="lastUpdate" style="text-align: center; font-size: 0.85rem; color: #666; margin-bottom: 15px;">
+        최근 업데이트 일시: 확인 중...
+    </div>
+    
+    <div class="container">
+        <div class="panel">
+            <div class="options-box">
+                <div style="font-weight: bold; margin-bottom: 8px;">출력 옵션 설정</div>
+                <label>
+                    <input type="checkbox" id="chkDiamond"> 별(☆★)을 마름모(◇◆)로 표시
+                </label>
+                <label>
+                    <input type="checkbox" id="chkAlignLeft" onchange="if(this.checked) document.getElementById('chkAlignRight').checked = false;"> 이름을 왼쪽 정렬
+                </label>
+                <label style="margin-bottom: 0;">
+                    <input type="checkbox" id="chkAlignRight" onchange="if(this.checked) document.getElementById('chkAlignLeft').checked = false;"> 이름을 오른쪽 정렬
+                </label>
+            </div>
+
+            <h3>1. 원본 로그 붙여넣기</h3>
+            <textarea id="rawLog" placeholder="여기에 마을 로그 전체를 복사해서 붙여넣으세요."></textarea>
+            <button onclick="processLog()">1차 추려내기</button>
+            
+            <h3>2. 필터링된 로그 (수정 가능)</h3>
+            <textarea id="filteredResult" placeholder="추려진 로그가 표시되며, 자유롭게 수정할 수 있습니다."></textarea>
+            <button onclick="generateSummary()" style="background-color: #28a745;">3. 최종 집계표 생성</button>
+        </div>
+        
+        <div class="panel">
+            <h3>3. 자동 집계표 결과</h3>
+            <div id="summaryResult" class="result-box">집계 데이터가 없습니다.</div>
+        </div>
+    </div>
+
+    <script>
+        function parseLogTimeDetails(headerStr) {
+            const timeMatch = headerStr.match(/(\d+)일[째차]\s+(\d{2}):(\d{2}):(\d{2})/);
+            if (!timeMatch) return null;
+            
+            return {
+                day: parseInt(timeMatch[1], 10),
+                hour: parseInt(timeMatch[2], 10),
+                minute: parseInt(timeMatch[3], 10),
+                second: parseInt(timeMatch[4], 10)
+            };
+        }
+
+        // 이름의 시각적 길이를 산출하는 함수 (한글 1, 나머지 0.5)
+        function getVisualLength(str) {
+            let len = 0;
+            for (let i = 0; i < str.length; i++) {
+                if (/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(str[i])) {
+                    len += 1;
+                } else {
+                    len += 0.5;
+                }
+            }
+            return len;
+        }
+
+        function processLog() {
+            const rawText = document.getElementById('rawLog').value;
+            const lines = rawText.split('\n');
+            
+            let whiteStarLines = [];
+            let blackStarLines = [];
+            let maxValidTimeValue = -1; 
+            let lastValidSpeaker = "";  
+            let lastValidTimeStr = "";
+            let baseHour = -1;
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i]; 
+                if (!line.trim()) continue;
+
+                const headerMatch = line.match(/(.*?)\s*(\d+일[째차]\s+\d{2}:\d{2}:\d{2})/);
+
+                if (headerMatch) {
+                    const speakerName = headerMatch[1].trim();
+                    const timeStr = headerMatch[2].trim();
+                    const timeObj = parseLogTimeDetails(timeStr);
+
+                    if (timeObj !== null) {
+                        if (baseHour === -1) {
+                            baseHour = timeObj.hour;
+                        }
+
+                        let effectiveHour = timeObj.hour;
+                        
+                        if (effectiveHour < baseHour) {
+                            effectiveHour += 24;
+                        }
+
+                        const currentLineTimeValue = (timeObj.day * 86400) + (effectiveHour * 3600) + (timeObj.minute * 60) + timeObj.second;
+
+                        if (maxValidTimeValue !== -1 && currentLineTimeValue < maxValidTimeValue) {
+                            line = ""; 
+                        } else {
+                            maxValidTimeValue = currentLineTimeValue;
+                            lastValidSpeaker = speakerName;
+                            lastValidTimeStr = timeStr;
+                        }
+                    }
+                }
+
+                const starGlobalRegex = /([☆★])\s*([^\s☆★]+)/g;
+                let match;
+                
+                while ((match = starGlobalRegex.exec(line)) !== null) {
+                    const star = match[1];
+                    const name = match[2].trim(); 
+                    
+                    if (lastValidTimeStr) {
+                        const formattedLine = `${lastValidSpeaker} ${lastValidTimeStr} ${star}${name}`;
+                        if (star === '☆') {
+                            whiteStarLines.push(formattedLine);
+                        } else if (star === '★') {
+                            blackStarLines.push(formattedLine);
+                        }
+                    }
+                }
+            }
+
+            let resultText = "";
+            if (whiteStarLines.length > 0) {
+                resultText += `[투표추천]\n` + whiteStarLines.join('\n') + `\n\n`;
+            }
+            if (blackStarLines.length > 0) {
+                resultText += `[점추천]\n` + blackStarLines.join('\n');
+            }
+            
+            document.getElementById('filteredResult').value = resultText.trim() || "조건에 맞는 추천 로그가 없습니다.";
+        }
+
+        function generateSummary() {
+            const filteredText = document.getElementById('filteredResult').value;
+            if (!filteredText || filteredText.startsWith("조건에")) {
+                document.getElementById('summaryResult').innerText = "집계할 데이터가 없습니다.";
+                return;
+            }
+
+            const lines = filteredText.split('\n');
+            let category = null;
+            
+            let whiteLogs = [];
+            let blackLogs = [];
+            let whiteVoters = {};
+            let blackVoters = {};
+            let globalMaxSpeakerLen = 0;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                if (line.includes('[투표추천]')) { category = 'white'; continue; }
+                if (line.includes('[점추천]')) { category = 'black'; continue; }
+
+                const lastWhiteIdx = Math.max(line.lastIndexOf('☆'), line.lastIndexOf('◇'));
+                const lastBlackIdx = Math.max(line.lastIndexOf('★'), line.lastIndexOf('◆'));
+                const lastStarIdx = Math.max(lastWhiteIdx, lastBlackIdx);
+                
+                if (lastStarIdx !== -1 && category) {
+                    let voter = "";
+                    let timeStr = "";
+                    const timeMatch = line.match(/\d+일[째차]\s+\d{2}:\d{2}:\d{2}/);
+                    
+                    if (timeMatch) {
+                        voter = line.substring(0, timeMatch.index).trim();
+                        timeStr = timeMatch[0];
+                    } else {
+                        voter = line.split(/[\s\u3000]+/)[0];
+                    }
+
+                    const visualLen = getVisualLength(voter);
+                    if (visualLen > globalMaxSpeakerLen) {
+                        globalMaxSpeakerLen = visualLen;
+                    }
+
+                    const target = line.substring(lastStarIdx + 1).trim();
+                    const logObj = { voter, timeStr, target, originalLine: line, starIndex: lastStarIdx };
+                    
+                    if (category === 'white') {
+                        whiteLogs.push(logObj);
+                        whiteVoters[voter] = whiteLogs.length - 1; 
+                    } else {
+                        blackLogs.push(logObj);
+                        blackVoters[voter] = blackLogs.length - 1;
+                    }
+                } else if (category) {
+                     const logObj = { isText: true, text: line };
+                     if (category === 'white') whiteLogs.push(logObj);
+                     else blackLogs.push(logObj);
+                }
+            }
+
+            const alignLeft = document.getElementById('chkAlignLeft').checked;
+            const alignRight = document.getElementById('chkAlignRight').checked;
+            const useDiamond = document.getElementById('chkDiamond').checked;
+
+            const processCategory = (logs, votersMap, title) => {
+                if (logs.length === 0) return "";
+                
+                let resultText = `[${title}]\n`;
+                let votes = {};
+                let hasVotes = false;
+
+                for (let i = 0; i < logs.length; i++) {
+                    const p = logs[i];
+                    if (p.isText) {
+                        resultText += p.text + '\n';
+                        continue;
+                    }
+
+                    let spk = p.voter;
+                    let padStr = "";
+                    
+                    if (alignLeft || alignRight) {
+                        let diff = globalMaxSpeakerLen - getVisualLength(spk);
+                        let fullSpaces = Math.floor(diff);
+                        let halfSpaces = (diff % 1 !== 0) ? 1 : 0;
+                        
+                        padStr += '\u3000'.repeat(fullSpaces);
+                        if (halfSpaces > 0) {
+                            padStr += ' '; 
+                        }
+                    }
+                    
+                    if (alignLeft) {
+                        spk = spk + padStr;
+                    } else if (alignRight) {
+                        spk = padStr + spk;
+                    }
+                    
+                    const isLast = (votersMap[p.voter] === i);
+                    let starPart = p.originalLine.substring(p.starIndex);
+                    
+                    if (!isLast) {
+                        starPart = '--' + p.originalLine.substring(p.starIndex + 1);
+                    }
+
+                    if (useDiamond) {
+                        starPart = starPart.replace(/☆/g, '◇').replace(/★/g, '◆');
+                    }
+
+                    const newLine = p.timeStr ? `${spk} ${p.timeStr} ${starPart}` : `${spk} ${starPart}`;
+                    resultText += newLine + '\n';
+
+                    if (isLast) {
+                        const targets = p.target.split('/').map(t => t.trim()).filter(t => t.length > 0);
+                        const voteValue = targets.length > 0 ? 1 / targets.length : 0;
+
+                        for (let t of targets) {
+                            if (!votes[t]) {
+                                votes[t] = { count: 0, voters: [], lastVoteIndex: -1 };
+                            }
+                            votes[t].count += voteValue;
+                            votes[t].voters.push(p.voter);
+                            if (i > votes[t].lastVoteIndex) {
+                                votes[t].lastVoteIndex = i;
+                            }
+                            hasVotes = true;
+                        }
+                    }
+                }
+
+                resultText += '\n';
+
+                if (hasVotes) {
+                    const sortedTargets = Object.keys(votes).sort((a, b) => {
+                        if (Math.abs(votes[b].count - votes[a].count) > 0.001) {
+                            return votes[b].count - votes[a].count; 
+                        }
+                        return votes[a].lastVoteIndex - votes[b].lastVoteIndex; 
+                    });
+
+                    for (let target of sortedTargets) {
+                        const vInfo = votes[target];
+                        const displayCount = Number(vInfo.count.toFixed(2));
+                        resultText += `${target} ${displayCount}표 (${vInfo.voters.join(', ')})\n`;
+                    }
+                } else {
+                    resultText += `(데이터 없음)\n`;
+                }
+
+                return resultText + '\n';
+            };
+
+            let summaryHtml = "";
+            summaryHtml += processCategory(whiteLogs, whiteVoters, "투표추천");
+            summaryHtml += processCategory(blackLogs, blackVoters, "점추천");
+
+            document.getElementById('summaryResult').innerText = summaryHtml.trim();
+        }
+
+        window.onload = function() {
+            const username = "ziziism"; 
+            const repo = "ww_votecount";     
+            
+            const url = `https://api.github.com/repos/${username}/${repo}/commits?per_page=1`;
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error();
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const commitDate = new Date(data[0].commit.author.date);
+                        const formattedDate = commitDate.toLocaleString('ko-KR', {
+                            year: 'numeric', month: '2-digit', day: '2-digit',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit',
+                            hour12: false
+                        });
+                        document.getElementById('lastUpdate').innerText = `최근 업데이트 일시: ${formattedDate}`;
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('lastUpdate').innerText = `최근 업데이트 일시: 확인 불가`;
+                });
+        };
+    </script>
+
+</body>
+</html>
