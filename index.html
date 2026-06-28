@@ -149,7 +149,6 @@
             };
         }
 
-        // 이름의 시각적 길이를 산출하는 함수 (한글 1, 나머지 0.5)
         function getVisualLength(str) {
             let len = 0;
             for (let i = 0; i < str.length; i++) {
@@ -171,7 +170,7 @@
             let maxValidTimeValue = -1; 
             let lastValidSpeaker = "";  
             let lastValidTimeStr = "";
-            let baseHour = -1;
+            let baseTimeInSeconds = -1; 
 
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i]; 
@@ -185,17 +184,19 @@
                     const timeObj = parseLogTimeDetails(timeStr);
 
                     if (timeObj !== null) {
-                        if (baseHour === -1) {
-                            baseHour = timeObj.hour;
+                        const currentTimeInSeconds = (timeObj.hour * 3600) + (timeObj.minute * 60) + timeObj.second;
+
+                        if (baseTimeInSeconds === -1) {
+                            baseTimeInSeconds = currentTimeInSeconds;
                         }
 
-                        let effectiveHour = timeObj.hour;
+                        let effectiveTimeInSeconds = currentTimeInSeconds;
                         
-                        if (effectiveHour < baseHour) {
-                            effectiveHour += 24;
+                        if (effectiveTimeInSeconds < baseTimeInSeconds) {
+                            effectiveTimeInSeconds += 86400; 
                         }
 
-                        const currentLineTimeValue = (timeObj.day * 86400) + (effectiveHour * 3600) + (timeObj.minute * 60) + timeObj.second;
+                        const currentLineTimeValue = (timeObj.day * 86400) + effectiveTimeInSeconds;
 
                         if (maxValidTimeValue !== -1 && currentLineTimeValue < maxValidTimeValue) {
                             line = ""; 
