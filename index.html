@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>마을 로그 집계 도구</title>
+    <title>난집불 - 인랑 집계 도구</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
             color: #333;
         }
-        h2 { text-align: center; font-size: 1.2rem; margin-bottom: 5px; }
+        h2 { text-align: center; font-size: 1.4rem; margin-bottom: 15px; }
         .container {
             display: flex;
             flex-direction: column;
@@ -70,6 +70,18 @@
             margin-bottom: 6px;
             cursor: pointer;
         }
+        .guide-box {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .guide-box ul {
+            margin: 10px 0 0 0;
+            padding-left: 20px;
+        }
         @media (min-width: 768px) {
             .container { flex-direction: row; }
             .panel { flex: 1; }
@@ -78,13 +90,24 @@
 </head>
 <body>
 
-    <h2>로그 집계 도구</h2>
+    <h2>난집불 - 인랑 집계 도구</h2>
     <div id="lastUpdate" style="text-align: center; font-size: 0.85rem; color: #666; margin-bottom: 15px;">
         최근 업데이트 일시: 확인 중...
     </div>
     
     <div class="container">
         <div class="panel">
+            <h3>1. 전체 로그 붙여넣기</h3>
+            <textarea id="rawLog" placeholder="여기에 마을 로그 전체를 복사해서 붙여넣으세요."></textarea>
+            <button onclick="processLog()">1차 추려내기</button>
+            
+            <h3>2. 필터링된 점/투표추천(수정 가능)</h3>
+            <textarea id="filteredResult" placeholder="추려진 점/투표추천이 표시되며, 자유롭게 수정할 수 있습니다."></textarea>
+            <button onclick="generateSummary()" style="background-color: #28a745;">최종 집계표 생성</button>
+        </div>
+        
+        <div class="panel">
+            <h3 style="visibility: hidden;">레이아웃 정렬용 격벽</h3>
             <div class="options-box">
                 <div style="font-weight: bold; margin-bottom: 8px;">출력 옵션 설정</div>
                 <label>
@@ -98,19 +121,19 @@
                 </label>
             </div>
 
-            <h3>1. 원본 로그 붙여넣기</h3>
-            <textarea id="rawLog" placeholder="여기에 마을 로그 전체를 복사해서 붙여넣으세요."></textarea>
-            <button onclick="processLog()">1차 추려내기</button>
-            
-            <h3>2. 필터링된 로그 (수정 가능)</h3>
-            <textarea id="filteredResult" placeholder="추려진 로그가 표시되며, 자유롭게 수정할 수 있습니다."></textarea>
-            <button onclick="generateSummary()" style="background-color: #28a745;">3. 최종 집계표 생성</button>
-        </div>
-        
-        <div class="panel">
-            <h3>3. 자동 집계표 결과</h3>
+            <h3>자동 집계표 결과</h3>
             <div id="summaryResult" class="result-box">집계 데이터가 없습니다.</div>
         </div>
+    </div>
+
+    <div class="guide-box">
+        <strong>사용법 안내</strong>
+        <ul>
+            <li>첫 번째 칸에 마을 로그 전체를 복사해서 붙여넣으세요. 마을 화면에서 모든 로그를 펼치고 Ctrl+A를 이용하면 편리합니다. <strong>단, 일반로그가 아닌 로그가 섞여 집계로 나갈 수 있으니 주의하세요!</strong></li>
+            <li>두 번째 칸에 추려진 점/투표추천을 보고, 필요한 경우 수정하세요. 점/투표추천에 띄어쓰기가 섞인 경우 제대로 인식하지 못합니다.</li>
+            <li>반표는 자동으로 계산되며, 동다득이 있으면 선다득이 위로 올라갑니다.</li>
+            <li>로그 내용 중 집계표는 자동으로 제외됩니다.</li>
+        </ul>
     </div>
 
     <script>
@@ -126,7 +149,6 @@
             };
         }
 
-        // 이름의 시각적 길이를 산출하는 함수 (한글 1, 나머지 0.5)
         function getVisualLength(str) {
             let len = 0;
             for (let i = 0; i < str.length; i++) {
@@ -145,10 +167,11 @@
             
             let whiteStarLines = [];
             let blackStarLines = [];
+            
             let maxValidTimeValue = -1; 
+            let cycleOffset = 0;
             let lastValidSpeaker = "";  
             let lastValidTimeStr = "";
-            let baseHour = -1;
 
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i]; 
@@ -162,22 +185,21 @@
                     const timeObj = parseLogTimeDetails(timeStr);
 
                     if (timeObj !== null) {
-                        if (baseHour === -1) {
-                            baseHour = timeObj.hour;
-                        }
+                        let rawTime = (timeObj.day * 86400) + (timeObj.hour * 3600) + (timeObj.minute * 60) + timeObj.second;
+                        let timeVal = rawTime + cycleOffset;
 
-                        let effectiveHour = timeObj.hour;
-                        
-                        if (effectiveHour < baseHour) {
-                            effectiveHour += 24;
-                        }
-
-                        const currentLineTimeValue = (timeObj.day * 86400) + (effectiveHour * 3600) + (timeObj.minute * 60) + timeObj.second;
-
-                        if (maxValidTimeValue !== -1 && currentLineTimeValue < maxValidTimeValue) {
-                            line = ""; 
+                        if (maxValidTimeValue !== -1 && timeVal < maxValidTimeValue) {
+                            if (maxValidTimeValue - timeVal > 43200) {
+                                cycleOffset += 86400;
+                                timeVal += 86400;
+                                maxValidTimeValue = timeVal;
+                                lastValidSpeaker = speakerName;
+                                lastValidTimeStr = timeStr;
+                            } else {
+                                line = ""; 
+                            }
                         } else {
-                            maxValidTimeValue = currentLineTimeValue;
+                            maxValidTimeValue = timeVal;
                             lastValidSpeaker = speakerName;
                             lastValidTimeStr = timeStr;
                         }
@@ -210,13 +232,13 @@
                 resultText += `[점추천]\n` + blackStarLines.join('\n');
             }
             
-            document.getElementById('filteredResult').value = resultText.trim() || "조건에 맞는 추천 로그가 없습니다.";
+            document.getElementById('filteredResult').value = resultText.trim() || "조건에 맞는 로그가 없습니다.";
         }
 
         function generateSummary() {
             const filteredText = document.getElementById('filteredResult').value;
             if (!filteredText || filteredText.startsWith("조건에")) {
-                document.getElementById('summaryResult').innerText = "집계할 데이터가 없습니다.";
+                document.getElementById('summaryResult').innerText = "조건에 맞는 로그가 없습니다.";
                 return;
             }
 
