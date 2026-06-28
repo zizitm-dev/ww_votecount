@@ -169,7 +169,9 @@
             let blackStarLines = [];
             
             let maxValidTimeValue = -1; 
-            let cycleOffset = 0;
+            let lastValidDay = -1;
+            let lastValidHour = -1;
+            let midnightCrossedForDay = {};
             let lastValidSpeaker = "";  
             let lastValidTimeStr = "";
 
@@ -185,21 +187,28 @@
                     const timeObj = parseLogTimeDetails(timeStr);
 
                     if (timeObj !== null) {
-                        let rawTime = (timeObj.day * 86400) + (timeObj.hour * 3600) + (timeObj.minute * 60) + timeObj.second;
-                        let timeVal = rawTime + cycleOffset;
-
-                        if (maxValidTimeValue !== -1 && timeVal < maxValidTimeValue) {
-                            if (maxValidTimeValue - timeVal > 43200) {
-                                cycleOffset += 86400;
-                                timeVal += 86400;
-                                maxValidTimeValue = timeVal;
-                                lastValidSpeaker = speakerName;
-                                lastValidTimeStr = timeStr;
-                            } else {
-                                line = ""; 
+                        let day = timeObj.day;
+                        let hour = timeObj.hour;
+                        
+                        if (maxValidTimeValue !== -1 && day === lastValidDay) {
+                            if (hour < lastValidHour && (lastValidHour - hour) >= 12) {
+                                midnightCrossedForDay[day] = true;
                             }
+                        }
+                        
+                        let effectiveHour = hour;
+                        if (midnightCrossedForDay[day] && hour < 12) {
+                            effectiveHour += 24;
+                        }
+                        
+                        let currentLineTimeValue = (day * 86400) + (effectiveHour * 3600) + (timeObj.minute * 60) + timeObj.second;
+
+                        if (maxValidTimeValue !== -1 && currentLineTimeValue < maxValidTimeValue) {
+                            line = ""; 
                         } else {
-                            maxValidTimeValue = timeVal;
+                            maxValidTimeValue = currentLineTimeValue;
+                            lastValidDay = day;
+                            lastValidHour = hour;
                             lastValidSpeaker = speakerName;
                             lastValidTimeStr = timeStr;
                         }
