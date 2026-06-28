@@ -12,7 +12,7 @@
             background-color: #f5f5f5;
             color: #333;
         }
-        h2 { text-align: center; font-size: 1.4rem; margin-bottom: 15px; }
+        h2 { text-align: center; font-size: 1.4rem; margin-bottom: 5px; }
         .container {
             display: flex;
             flex-direction: column;
@@ -149,6 +149,7 @@
             };
         }
 
+        // 이름의 시각적 길이를 산출하는 함수 (한글 1, 나머지 0.5)
         function getVisualLength(str) {
             let len = 0;
             for (let i = 0; i < str.length; i++) {
@@ -167,13 +168,10 @@
             
             let whiteStarLines = [];
             let blackStarLines = [];
-            
             let maxValidTimeValue = -1; 
-            let lastValidDay = -1;
-            let lastValidHour = -1;
-            let midnightCrossedForDay = {};
             let lastValidSpeaker = "";  
             let lastValidTimeStr = "";
+            let baseHour = -1;
 
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i]; 
@@ -187,28 +185,22 @@
                     const timeObj = parseLogTimeDetails(timeStr);
 
                     if (timeObj !== null) {
-                        let day = timeObj.day;
-                        let hour = timeObj.hour;
-                        
-                        if (maxValidTimeValue !== -1 && day === lastValidDay) {
-                            if (hour < lastValidHour && (lastValidHour - hour) >= 12) {
-                                midnightCrossedForDay[day] = true;
-                            }
+                        if (baseHour === -1) {
+                            baseHour = timeObj.hour;
                         }
+
+                        let effectiveHour = timeObj.hour;
                         
-                        let effectiveHour = hour;
-                        if (midnightCrossedForDay[day] && hour < 12) {
+                        if (effectiveHour < baseHour) {
                             effectiveHour += 24;
                         }
-                        
-                        let currentLineTimeValue = (day * 86400) + (effectiveHour * 3600) + (timeObj.minute * 60) + timeObj.second;
+
+                        const currentLineTimeValue = (timeObj.day * 86400) + (effectiveHour * 3600) + (timeObj.minute * 60) + timeObj.second;
 
                         if (maxValidTimeValue !== -1 && currentLineTimeValue < maxValidTimeValue) {
                             line = ""; 
                         } else {
                             maxValidTimeValue = currentLineTimeValue;
-                            lastValidDay = day;
-                            lastValidHour = hour;
                             lastValidSpeaker = speakerName;
                             lastValidTimeStr = timeStr;
                         }
@@ -247,7 +239,7 @@
         function generateSummary() {
             const filteredText = document.getElementById('filteredResult').value;
             if (!filteredText || filteredText.startsWith("조건에")) {
-                document.getElementById('summaryResult').innerText = "조건에 맞는 로그가 없습니다.";
+                document.getElementById('summaryResult').innerText = "집계할 데이터가 없습니다.";
                 return;
             }
 
