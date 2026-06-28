@@ -265,18 +265,19 @@
 
                 const lastWhiteIdx = Math.max(line.lastIndexOf('☆'), line.lastIndexOf('◇'));
                 const lastBlackIdx = Math.max(line.lastIndexOf('★'), line.lastIndexOf('◆'));
-                const lastStarIdx = Math.max(lastWhiteIdx, lastBlackIdx);
+                const lastDashIdx = line.lastIndexOf('--');
+                const lastStarIdx = Math.max(lastWhiteIdx, lastBlackIdx, lastDashIdx);
                 
                 if (lastStarIdx !== -1 && category) {
                     let voter = "";
                     let timeStr = "";
                     const timeMatch = line.match(/\d+일[째차]\s+\d{2}:\d{2}:\d{2}/);
                     
-                    if (timeMatch) {
-                        voter = line.substring(0, timeMatch.index).trim();
+                    if (timeMatch && timeMatch.index < lastStarIdx) {
+                        voter = line.substring(0, timeMatch.index).replace(/[\s\u3000]+$/, '');
                         timeStr = timeMatch[0];
                     } else {
-                        voter = line.split(/[\s\u3000]+/)[0];
+                        voter = line.substring(0, lastStarIdx).replace(/[\s\u3000]+$/, '');
                     }
 
                     const visualLen = getVisualLength(voter);
@@ -284,8 +285,22 @@
                         globalMaxSpeakerLen = visualLen;
                     }
 
-                    const target = line.substring(lastStarIdx + 1).trim();
-                    const logObj = { voter, timeStr, target, originalLine: line, starIndex: lastStarIdx };
+                    let symbol = line.substring(lastStarIdx, lastStarIdx + (line.charAt(lastStarIdx) === '-' ? 2 : 1));
+                    let target = line.substring(lastStarIdx + symbol.length).trim();
+                    
+                    if (target.endsWith('.')) {
+                        target = target.slice(0, -1);
+                    }
+
+                    if (symbol === '--') {
+                        symbol = category === 'white' ? '☆' : '★';
+                    } else if (symbol === '◇') {
+                        symbol = '☆';
+                    } else if (symbol === '◆') {
+                        symbol = '★';
+                    }
+
+                    const logObj = { voter, timeStr, target, symbol };
                     
                     if (category === 'white') {
                         whiteLogs.push(logObj);
@@ -295,6 +310,9 @@
                         blackVoters[voter] = blackLogs.length - 1;
                     }
                 } else if (category) {
+                     if (line.match(/[\d.]+\s*표\s*\(/) || line.includes('(데이터 없음)')) {
+                         continue;
+                     }
                      const logObj = { isText: true, text: line };
                      if (category === 'white') whiteLogs.push(logObj);
                      else blackLogs.push(logObj);
@@ -340,17 +358,17 @@
                     }
                     
                     const isLast = (votersMap[p.voter] === i);
-                    let starPart = p.originalLine.substring(p.starIndex);
+                    let outSymbol = p.symbol;
                     
                     if (!isLast) {
-                        starPart = '--' + p.originalLine.substring(p.starIndex + 1);
+                        outSymbol = '--';
+                    } else {
+                        if (useDiamond) {
+                            outSymbol = outSymbol.replace(/☆/g, '◇').replace(/★/g, '◆');
+                        }
                     }
 
-                    if (useDiamond) {
-                        starPart = starPart.replace(/☆/g, '◇').replace(/★/g, '◆');
-                    }
-
-                    const newLine = p.timeStr ? `${spk} ${p.timeStr} ${starPart}` : `${spk} ${starPart}`;
+                    const newLine = p.timeStr ? `${spk} ${p.timeStr} ${outSymbol}${p.target}` : `${spk} ${outSymbol}${p.target}`;
                     resultText += newLine + '\n';
 
                     if (isLast) {
