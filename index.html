@@ -99,9 +99,9 @@
         <div class="panel">
             <h3>1. 전체 로그 붙여넣기</h3>
             <textarea id="rawLog" placeholder="여기에 마을 로그 전체를 복사해서 붙여넣으세요."></textarea>
-            <button onclick="processLog()">1차 추려내기</button>
+            <button onclick="processLog()">점/투표추천 추려내기</button>
             
-            <h3>2. 필터링된 점/투표추천(수정 가능)</h3>
+            <h3>2. 점/투표추천(수정 가능)</h3>
             <textarea id="filteredResult" placeholder="추려진 점/투표추천이 표시되며, 자유롭게 수정할 수 있습니다."></textarea>
             <button onclick="generateSummary()" style="background-color: #28a745;">최종 집계표 생성</button>
         </div>
@@ -121,7 +121,7 @@
                 </label>
             </div>
 
-            <h3>자동 집계표 결과</h3>
+            <h3>3. 자동 집계표 결과</h3>
             <div id="summaryResult" class="result-box">집계 데이터가 없습니다.</div>
         </div>
     </div>
